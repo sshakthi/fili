@@ -30,14 +30,19 @@ public class HeaderNestingJsonBuilderStrategy implements Function<Response, Json
 
     @Override
     public JsonNode apply(Response response) {
+        MappingJsonFactory mappingJsonFactory = new MappingJsonFactory();
         ObjectNode objectNode = JsonNodeFactory.instance.objectNode();
         objectNode.set("response", baseStrategy.apply(response));
         try {
             objectNode.set(
                     "X-Druid-Response-Context",
-                    new MappingJsonFactory()
+                    mappingJsonFactory
                             .createParser(response.getHeader("X-Druid-Response-Context"))
                             .readValueAsTree()
+            );
+            objectNode.set(
+                    "status-code",
+                    mappingJsonFactory.createParser(String.valueOf(response.getStatusCode())).readValueAsTree()
             );
         } catch (IOException ioe) {
             throw new IllegalStateException(ioe);
