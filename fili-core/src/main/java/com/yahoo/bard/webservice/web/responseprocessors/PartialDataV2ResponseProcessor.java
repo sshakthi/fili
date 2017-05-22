@@ -5,11 +5,17 @@ package com.yahoo.bard.webservice.web.responseprocessors;
 import com.yahoo.bard.webservice.druid.client.FailureCallback;
 import com.yahoo.bard.webservice.druid.client.HttpErrorCallback;
 import com.yahoo.bard.webservice.druid.model.query.DruidAggregationQuery;
+import com.yahoo.bard.webservice.util.SimplifiedIntervalList;
+import com.yahoo.bard.webservice.web.ErrorMessageFormat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
+import org.joda.time.Interval;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.ws.rs.core.Response.Status;
 
@@ -48,7 +54,7 @@ import javax.ws.rs.core.Response.Status;
  * Date:  Mon, 10 Apr 2017 16:24:24 GMT
  * Content-Type:  application/json
  * X-Druid-Query-Id:  92c81bed-d9e6-4242-836b-0fcd1efdee9e
- *     X-Druid-Response-Context: {
+ * X-Druid-Response-Context: {
  *     "uncoveredIntervals": [
  *         "2016-11-22T00:00:00.000Z/2016-12-18T00:00:00.000Z","2016-12-25T00:00:00.000Z/2017-
  *         01-03T00:00:00.000Z","2017-01-31T00:00:00.000Z/2017-02-01T00:00:00.000Z","2017-02-
@@ -110,26 +116,20 @@ public class PartialDataV2ResponseProcessor implements FullResponseProcessor {
      *     <li>
      *         Extract uncoveredIntervalsOverflowed from X-Druid-Response-Context inside the JsonNode passed into
      *         PartialDataV2ResponseProcessor::processResponse, if it is true, invoke error response saying limit
-     *         overflowed
+     *         overflowed,
      *     </li>
      *     <li>
      *         Extract uncoveredIntervals from X-Druid-Response-Contex inside the JsonNode passed into
-     *         PartialDataV2ResponseProcessor::processResponse
+     *         PartialDataV2ResponseProcessor::processResponse,
      *     </li>
      *     <li>
      *         Parse both the uncoveredIntervals extracted above and allAvailableIntervals extracted from the union of
-     *         all the query's datasource's availabilities from DataSourceMetadataService into SimplifiedIntervalLists
+     *         all the query's datasource's availabilities from DataSourceMetadataService into SimplifiedIntervalLists,
      *     </li>
      *     <li>
      *         Compare both SimplifiedIntervalLists above, if allAvailableIntervals has any overlap with
      *         uncoveredIntervals, invoke error response indicating druid is missing some data that are we expects to
      *         exists.
-     *     </li>
-     *     <li>
-     *         Otherwise, check if the next responseProcessor is a FullResponseProcessor or not, if yes, call the next
-     *         responseProcessor with the same JsonNode as passed int, otherwise call the next response with the
-     *         JsonNode being the response body JsonNode instead of the ObjectNode containing the extra
-     *         "X-Druid_Response-Context"
      *     </li>
      * </ol>
      *
@@ -141,9 +141,20 @@ public class PartialDataV2ResponseProcessor implements FullResponseProcessor {
     public void processResponse(JsonNode json, DruidAggregationQuery<?> query, LoggingContext metadata) {
         validateJsonResponse(json, query);
 
-        int statusCode = json.get("status-code").asInt();
-        if (statusCode == Status.OK.getStatusCode()) {
-            // implementation is blocked by https://github.com/yahoo/fili/pull/262
+        if (json.get("status-code").asInt() == Status.OK.getStatusCode()) {
+            checkOverflow(json, query);
+
+            SimplifiedIntervalList overlap = getUncoveredIntervalsFromResponse(json).intersect(
+                    query.getDataSource().getPhysicalTable().getAvailableIntervals()
+            );
+            if (!overlap.isEmpty()) {
+                logAndGetErrorCallback(ErrorMessageFormat.DATA_AVAILABILITY_MISMATCH.format(overlap), query);
+            }
+            if (next instanceof FullResponseProcessor) {
+                next.processResponse(json, query, metadata);
+            } else {
+                next.processResponse(json.get("response"), query, metadata);
+            }
         }
 
         next.processResponse(json, query, metadata);
@@ -162,23 +173,36 @@ public class PartialDataV2ResponseProcessor implements FullResponseProcessor {
      * </ul>
      *
      * @param json  The JSON response that is to be validated
-     * @param druidQuery  The query with the schema for processing this response
+     * @param query  The query with the schema for processing this response
      */
-    private void validateJsonResponse(JsonNode json, DruidAggregationQuery<?> druidQuery) {
+    private void validateJsonResponse(JsonNode json, DruidAggregationQuery<?> query) {
         if (!json.has("X-Druid-Response-Context")) {
-            logAndGetErrorCallback("Response is missing X-Druid-Response-Context", druidQuery);
+            logAndGetErrorCallback("Response is missing X-Druid-Response-Context", query);
         }
         if (!json.get("X-Druid-Response-Context").has("uncoveredIntervals")) {
-            logAndGetErrorCallback("Response is missing 'uncoveredIntervals' X-Druid-Response-Context", druidQuery);
+            logAndGetErrorCallback("Response is missing 'uncoveredIntervals' X-Druid-Response-Context", query);
         }
         if (!json.get("X-Druid-Response-Context").has("uncoveredIntervalsOverflowed")) {
             logAndGetErrorCallback(
                     "Response is missing 'uncoveredIntervalsOverflowed' X-Druid-Response-Context",
-                    druidQuery
+                    query
             );
         }
         if (!json.has("status-code")) {
-            logAndGetErrorCallback("Response is missing response status code", druidQuery);
+            logAndGetErrorCallback("Response is missing response status code", query);
+        }
+    }
+
+    /**
+     * Checks and invokes error if the number of missing intervals are overflowed, i.e. more than the configured limit.
+     *
+     * @param json  The json object containing the overflow flag
+     * @param query  The query with the schema for processing this response
+     */
+    private void checkOverflow(JsonNode json, DruidAggregationQuery<?> query) {
+        if (json.get("X-Druid-Response-Context").get("uncoveredIntervalsOverflowed").asBoolean()) {
+            int limit = query.getContext().getUncoveredIntervalsLimit();
+            logAndGetErrorCallback(ErrorMessageFormat.TOO_MUCH_INTERVAL_MISSING.format(limit, limit), query);
         }
     }
 
@@ -186,13 +210,44 @@ public class PartialDataV2ResponseProcessor implements FullResponseProcessor {
      * Logs and gets error call back on the response with the provided error message.
      *
      * @param message  The error message passed to the logger and the exception
-     * @param druidQuery  The query with the schema for processing this response
+     * @param query  The query with the schema for processing this response
      */
-    private void logAndGetErrorCallback(String message, DruidAggregationQuery<?> druidQuery) {
+    private void logAndGetErrorCallback(String message, DruidAggregationQuery<?> query) {
         LOG.error(message);
-        getErrorCallback(druidQuery).dispatch(
+        getErrorCallback(query).dispatch(
                 Status.INTERNAL_SERVER_ERROR.getStatusCode(),
                 "The server encountered an unexpected condition which prevented it from fulfilling the request.",
                 message);
+    }
+
+    /**
+     * Returns uncovered intervals from Druid response in a SimplifiedIntervalList.
+     *
+     * @param json the JSON object containing the list of uncovered intervals, for example
+     * <pre>
+     * {@code
+     * X-Druid-Response-Context: {
+     *     "uncoveredIntervals": [
+     *         "2016-11-22T00:00:00.000Z/2016-12-18T00:00:00.000Z","2016-12-25T00:00:00.000Z/2017-
+     *         01-03T00:00:00.000Z","2017-01-31T00:00:00.000Z/2017-02-01T00:00:00.000Z","2017-02-
+     *         08T00:00:00.000Z/2017-02-09T00:00:00.000Z","2017-02-10T00:00:00.000Z/2017-02-
+     *         13T00:00:00.000Z","2017-02-16T00:00:00.000Z/2017-02-20T00:00:00.000Z","2017-02-
+     *         22T00:00:00.000Z/2017-02-25T00:00:00.000Z","2017-02-26T00:00:00.000Z/2017-03-
+     *         01T00:00:00.000Z","2017-03-04T00:00:00.000Z/2017-03-05T00:00:00.000Z","2017-03-
+     *         08T00:00:00.000Z/2017-03-09T00:00:00.000Z"
+     *     ],
+     *     "uncoveredIntervalsOverflowed": true
+     * }
+     * }
+     * </pre>
+     *
+     * @return uncovered intervals in a SimplifiedIntervalList.
+     */
+    private static SimplifiedIntervalList getUncoveredIntervalsFromResponse(JsonNode json) {
+        List<Interval> intervals = new ArrayList<>();
+        for (JsonNode jsonNode : json.get("X-Druid-Response-Context").get("uncoveredIntervals")) {
+            intervals.add(new Interval(jsonNode.asText()));
+        }
+        return new SimplifiedIntervalList(intervals);
     }
 }
