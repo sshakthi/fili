@@ -61,8 +61,8 @@ public class AsyncDruidWebServiceImpl implements DruidWebService {
     private final Meter httpErrorMeter;
     private final Meter exceptionMeter;
     private static final MetricRegistry REGISTRY = MetricRegistryFactory.getRegistry();
-    private static final boolean DRUID_CACHE_V3_ENABLED = SYSTEM_CONFIG.getBooleanProperty(
-            SYSTEM_CONFIG.getPackageVariableName("druid_cache_v3_enabled"),
+    private static final boolean DRUID_ETAG_CACHE_ENABLED = SYSTEM_CONFIG.getBooleanProperty(
+            SYSTEM_CONFIG.getPackageVariableName("druid_etag_cache_enabled"),
             true
     );
 
@@ -466,7 +466,7 @@ public class AsyncDruidWebServiceImpl implements DruidWebService {
     /**
      * Return true if response status code indicates an error.
      * <p>
-     * If cache v3 is enabled, i.e. DRUID_CACHE_V3_ENABLED is set to true, no error on 200 OK and 304 NOT-MODIFIED.
+     * If etag cache is enabled, i.e. DRUID_ETAG_CACHE_ENABLED is set to true, no error on 200 OK and 304 NOT-MODIFIED.
      * Otherwise, no error only on 200 OK.
      *
      * @param status  The Status object that contains status code to be checked
@@ -474,7 +474,7 @@ public class AsyncDruidWebServiceImpl implements DruidWebService {
      * @return true if the status code indicates an error
      */
     protected boolean hasError(Status status) {
-        return DRUID_CACHE_V3_ENABLED
+        return DRUID_ETAG_CACHE_ENABLED
                 ? status != Status.OK && status != Status.NOT_MODIFIED
                 : status != Status.OK;
     }
