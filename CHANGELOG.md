@@ -9,6 +9,13 @@ Current
 -------
 ### Added:
 
+- [Prepare for Etage Cache](https://github.com/yahoo/fili/pull/289)
+    * Add Etag Cache feature flag
+    * Deprecate Cache v1 components and remove from DruidWorkflow
+    * Log a warning indicating cache V1 has been deprecated
+    * Make `AsyncDruidWebServiceImpl::sendRequest` not blow up when getting a 304 status response if etag cache is on
+    * Add Etag header to JsonNode response
+
 - [Add `DataSourceName` concept, removing responsibility from `TableName`](https://github.com/yahoo/fili/pull/263)
     * `TableName` was serving double-duty, and it was causing problems and confusion. Splitting the concepts fixes it.
 
