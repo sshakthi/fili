@@ -7,7 +7,7 @@ package com.yahoo.bard.webservice.config;
  */
 public enum BardFeatureFlag implements FeatureFlag {
     PARTIAL_DATA("partial_data_enabled"),
-    DRUID_CACHE("druid_cache_enabled"),
+    @Deprecated DRUID_CACHE("druid_cache_enabled"),
     DRUID_CACHE_V2("druid_cache_v2_enabled"),
     DRUID_CACHE_V3("druid_cache_v3_enabled"),
     QUERY_SPLIT("query_split_enabled"),
