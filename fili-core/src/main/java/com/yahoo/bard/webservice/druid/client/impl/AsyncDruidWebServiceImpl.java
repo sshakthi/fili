@@ -54,17 +54,17 @@ import javax.ws.rs.core.Response.Status;
  */
 public class AsyncDruidWebServiceImpl implements DruidWebService {
     private static final Logger LOG = LoggerFactory.getLogger(AsyncDruidWebServiceImpl.class);
+    private static final MetricRegistry REGISTRY = MetricRegistryFactory.getRegistry();
     private static final SystemConfig SYSTEM_CONFIG = SystemConfigProvider.getInstance();
+    private static final boolean DRUID_ETAG_CACHE_ENABLED = SYSTEM_CONFIG.getBooleanProperty(
+            SYSTEM_CONFIG.getPackageVariableName("druid_etag_cache_enabled"),
+            true
+    );
 
     private final AsyncHttpClient webClient;
     private final ObjectWriter writer;
     private final Meter httpErrorMeter;
     private final Meter exceptionMeter;
-    private static final MetricRegistry REGISTRY = MetricRegistryFactory.getRegistry();
-    private static final boolean DRUID_ETAG_CACHE_ENABLED = SYSTEM_CONFIG.getBooleanProperty(
-            SYSTEM_CONFIG.getPackageVariableName("druid_etag_cache_enabled"),
-            true
-    );
 
     public static final String DRUID_TIMER = "DruidProcessing";
     public static final String DRUID_QUERY_TIMER = DRUID_TIMER + "_Q_";
