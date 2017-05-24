@@ -9,10 +9,10 @@ Current
 -------
 ### Added:
 
-- [Implement PartialDataV2ResponseProcessor](https://github.com/yahoo/fili/pull/275)
+- [Implement DruidPartialDataResponseProcessor](https://github.com/yahoo/fili/pull/275)
     * Add `FullResponseProcessor` interface that extends `ResponseProcessor`
     * Add response status code to JSON response
-    * Add `PartialDataV2ResponseProcessor` that checks for any missing data that's not being found
+    * Add `DruidPartialDataResponseProcessor` that checks for any missing data that's not being found
 
 - [Constrained Table Support for Table Serialization](https://github.com/yahoo/fili/pull/262/files)
     * Add ConstrainedTable which closes over a physical table and an availability, caching all availability merges.

@@ -9,6 +9,7 @@ import com.yahoo.bard.webservice.util.SimplifiedIntervalList;
 import com.yahoo.bard.webservice.web.ErrorMessageFormat;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 
 import org.joda.time.Interval;
 import org.slf4j.Logger;
@@ -20,32 +21,10 @@ import java.util.List;
 import javax.ws.rs.core.Response.Status;
 
 /**
- * Response processor for matching partial data.
+ * Response processor for finding missing partial data in Druid
  * <p>
- * In druid version 0.9.0 or later, druid implemented a feature that returns missing intervals for a given query
- * in the header of the query response from the Broker. This information is used in addition to the features
- * supported in Partial Data V1. We validate that what we expects from broker matches what the broker actually returned.
- * <p>
- * For example, an example below shows a druid query that requests broker to return the missing intervals:
- *
- * <pre>
- * {@code
- * Content-Type: application/json
- * {
- *     "queryType": "groupBy",
- *     "dataSource": "semiAvailableTable",
- *     "granularity": "day",
- *     "dimensions": [ "line_id" ],
- *     "aggregations": [ { "type": "longSum", "name": "myMetric", "fieldName": "myMetric" } ],
- *     "intervals": [ "2016-11-21/2017-12-19" ],
- *     "context": { "uncoveredIntervalsLimit": 10 }
- * }
- * }
- * </pre>
- *
- * In "context" section, "uncoveredIntervalsLimit" is set to let druid know that we want broker to return a list of
- * intervals that are not present. The value "10" indicates to return the first 10 continuous uncovered interval. With
- * this query, Druid responses with the header:
+ * In druid version 0.9.0 or later, druid implemented a feature that returns missing intervals for a given query.
+ * For example
  *
  * <pre>
  * {@code
@@ -73,15 +52,14 @@ import javax.ws.rs.core.Response.Status;
  * }
  * </pre>
  *
- * The flag "uncoveredIntervalsOverflowed" being true indicates that there are more uncovered intervals in addition to
- * the first 10 included. Using the "uncoveredIntervals", we can compare it to the missing intervals that we expects
+ * The missing intervals are indicated in "uncoveredIntervals". We compare it to the missing intervals that we expects
  * from Partial Data V1. If "uncoveredIntervals" contains any interval that is not present in our expected
  * missing interval list, we can send back an error response indicating the mismatch in data availability before the
  * response is cached.
  */
-public class PartialDataV2ResponseProcessor implements FullResponseProcessor {
+public class DruidPartialDataResponseProcessor implements FullResponseProcessor {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PartialDataV2ResponseProcessor.class);
+    private static final Logger LOG = LoggerFactory.getLogger(DruidPartialDataResponseProcessor.class);
 
     private final ResponseProcessor next;
 
@@ -90,7 +68,7 @@ public class PartialDataV2ResponseProcessor implements FullResponseProcessor {
      *
      * @param next  Next ResponseProcessor in the chain
      */
-    public PartialDataV2ResponseProcessor(ResponseProcessor next) {
+    public DruidPartialDataResponseProcessor(ResponseProcessor next) {
         this.next = next;
     }
 
@@ -115,12 +93,12 @@ public class PartialDataV2ResponseProcessor implements FullResponseProcessor {
      * <ol>
      *     <li>
      *         Extract uncoveredIntervalsOverflowed from X-Druid-Response-Context inside the JsonNode passed into
-     *         PartialDataV2ResponseProcessor::processResponse, if it is true, invoke error response saying limit
+     *         DruidPartialDataResponseProcessor::processResponse, if it is true, invoke error response saying limit
      *         overflowed,
      *     </li>
      *     <li>
      *         Extract uncoveredIntervals from X-Druid-Response-Contex inside the JsonNode passed into
-     *         PartialDataV2ResponseProcessor::processResponse,
+     *         DruidPartialDataResponseProcessor::processResponse,
      *     </li>
      *     <li>
      *         Parse both the uncoveredIntervals extracted above and allAvailableIntervals extracted from the union of
@@ -141,19 +119,17 @@ public class PartialDataV2ResponseProcessor implements FullResponseProcessor {
     public void processResponse(JsonNode json, DruidAggregationQuery<?> query, LoggingContext metadata) {
         validateJsonResponse(json, query);
 
-        if (json.get("status-code").asInt() == Status.OK.getStatusCode()) {
+        if (json.get(FullResponseContentKeys.STATUS_CODE.getName()).asInt() == Status.OK.getStatusCode()) {
             checkOverflow(json, query);
 
-            SimplifiedIntervalList overlap = getUncoveredIntervalsFromResponse(json).intersect(
-                    query.getDataSource().getPhysicalTable().getAvailableIntervals()
-            );
+            SimplifiedIntervalList overlap = getOverlap(json, query);
             if (!overlap.isEmpty()) {
                 logAndGetErrorCallback(ErrorMessageFormat.DATA_AVAILABILITY_MISMATCH.format(overlap), query);
             }
             if (next instanceof FullResponseProcessor) {
                 next.processResponse(json, query, metadata);
             } else {
-                next.processResponse(json.get("response"), query, metadata);
+                next.processResponse(json.get(FullResponseContentKeys.RESPONSE.getName()), query, metadata);
             }
         }
 
@@ -176,19 +152,29 @@ public class PartialDataV2ResponseProcessor implements FullResponseProcessor {
      * @param query  The query with the schema for processing this response
      */
     private void validateJsonResponse(JsonNode json, DruidAggregationQuery<?> query) {
-        if (!json.has("X-Druid-Response-Context")) {
+        if (json instanceof ArrayNode) {
+            logAndGetErrorCallback("Response is missing X-Druid-Response-Context and status code", query);
+        }
+        if (!json.has(FullResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())) {
             logAndGetErrorCallback("Response is missing X-Druid-Response-Context", query);
         }
-        if (!json.get("X-Druid-Response-Context").has("uncoveredIntervals")) {
-            logAndGetErrorCallback("Response is missing 'uncoveredIntervals' X-Druid-Response-Context", query);
-        }
-        if (!json.get("X-Druid-Response-Context").has("uncoveredIntervalsOverflowed")) {
+        if (!json.get(FullResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())
+                .has(FullResponseContentKeys.UNCOVERED_INTERVALS.getName())
+        ) {
             logAndGetErrorCallback(
-                    "Response is missing 'uncoveredIntervalsOverflowed' X-Druid-Response-Context",
+                    "Response is missing 'uncoveredIntervals' from X-Druid-Response-Context header",
                     query
             );
         }
-        if (!json.has("status-code")) {
+        if (!json.get(FullResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())
+                .has(FullResponseContentKeys.UNCOVERED_INTERVALS_OVERFLOWED.getName())
+        ) {
+            logAndGetErrorCallback(
+                    "Response is missing 'uncoveredIntervalsOverflowed' from X-Druid-Response-Context header",
+                    query
+            );
+        }
+        if (!json.has(FullResponseContentKeys.STATUS_CODE.getName())) {
             logAndGetErrorCallback("Response is missing response status code", query);
         }
     }
@@ -200,7 +186,10 @@ public class PartialDataV2ResponseProcessor implements FullResponseProcessor {
      * @param query  The query with the schema for processing this response
      */
     private void checkOverflow(JsonNode json, DruidAggregationQuery<?> query) {
-        if (json.get("X-Druid-Response-Context").get("uncoveredIntervalsOverflowed").asBoolean()) {
+        if (json.get(FullResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())
+                .get(FullResponseContentKeys.UNCOVERED_INTERVALS_OVERFLOWED.getName())
+                .asBoolean()
+    ) {
             int limit = query.getContext().getUncoveredIntervalsLimit();
             logAndGetErrorCallback(ErrorMessageFormat.TOO_MUCH_INTERVAL_MISSING.format(limit, limit), query);
         }
@@ -221,9 +210,9 @@ public class PartialDataV2ResponseProcessor implements FullResponseProcessor {
     }
 
     /**
-     * Returns uncovered intervals from Druid response in a SimplifiedIntervalList.
+     * Returns the overlap between uncoveredIntervals from Druid and missing intervals that Fili expects.
      *
-     * @param json the JSON object containing the list of uncovered intervals, for example
+     * @param json  The JSON node that contains the uncoveredIntervals from Druid, for example
      * <pre>
      * {@code
      * X-Druid-Response-Context: {
@@ -240,14 +229,22 @@ public class PartialDataV2ResponseProcessor implements FullResponseProcessor {
      * }
      * }
      * </pre>
+     * @param query  The Druid query that contains the missing intervals that Fili expects
      *
-     * @return uncovered intervals in a SimplifiedIntervalList.
+     * @return the overlap between uncoveredIntervals from Druid and missing intervals that Fili expects.
      */
-    private static SimplifiedIntervalList getUncoveredIntervalsFromResponse(JsonNode json) {
+    private SimplifiedIntervalList getOverlap(JsonNode json, DruidAggregationQuery<?> query) {
         List<Interval> intervals = new ArrayList<>();
-        for (JsonNode jsonNode : json.get("X-Druid-Response-Context").get("uncoveredIntervals")) {
+        for (JsonNode jsonNode :
+                json.get(FullResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())
+                        .get(FullResponseContentKeys.UNCOVERED_INTERVALS.getName())
+                ) {
             intervals.add(new Interval(jsonNode.asText()));
         }
-        return new SimplifiedIntervalList(intervals);
+        SimplifiedIntervalList druidIntervals = new SimplifiedIntervalList(intervals);
+
+        return druidIntervals.intersect(
+                query.getDataSource().getPhysicalTable().getAvailableIntervals()
+        );
     }
 }

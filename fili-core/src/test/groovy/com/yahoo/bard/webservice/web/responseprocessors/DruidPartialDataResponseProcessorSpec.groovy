@@ -4,7 +4,9 @@ package com.yahoo.bard.webservice.web.responseprocessors
 
 import com.yahoo.bard.webservice.druid.client.FailureCallback
 import com.yahoo.bard.webservice.druid.client.HttpErrorCallback
+import com.yahoo.bard.webservice.druid.model.datasource.DataSource
 import com.yahoo.bard.webservice.druid.model.query.DruidAggregationQuery
+import com.yahoo.bard.webservice.table.ConstrainedTable
 import com.yahoo.bard.webservice.util.SimplifiedIntervalList
 
 import com.fasterxml.jackson.databind.JsonNode
@@ -15,7 +17,7 @@ import org.joda.time.Interval
 
 import spock.lang.Specification
 
-class PartialDataV2ResponseProcessorSpec extends Specification {
+class DruidPartialDataResponseProcessorSpec extends Specification {
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .registerModule(new Jdk8Module().configureAbsentsAsNulls(false))
 
@@ -24,7 +26,7 @@ class PartialDataV2ResponseProcessorSpec extends Specification {
     FailureCallback failureCallback
     HttpErrorCallback httpErrorCallback
     ResponseProcessor next
-    PartialDataV2ResponseProcessor partialDataV2ResponseProcessor
+    DruidPartialDataResponseProcessor druidPartialDataResponseProcessor
 
     def setup() {
         druidAggregationQuery = Mock(DruidAggregationQuery)
@@ -35,19 +37,19 @@ class PartialDataV2ResponseProcessorSpec extends Specification {
         next.getResponseContext() >> responseContext
         next.getFailureCallback(druidAggregationQuery) >> failureCallback
         next.getErrorCallback(druidAggregationQuery) >> httpErrorCallback
-        partialDataV2ResponseProcessor = new PartialDataV2ResponseProcessor(next)
+        druidPartialDataResponseProcessor = new DruidPartialDataResponseProcessor(next)
     }
 
     def "Test constructor"() {
         expect:
-        partialDataV2ResponseProcessor.next == next;
+        druidPartialDataResponseProcessor.next == next;
     }
 
     def "Test proxy calls"() {
         when:
-        partialDataV2ResponseProcessor.getResponseContext()
-        partialDataV2ResponseProcessor.getErrorCallback(druidAggregationQuery)
-        partialDataV2ResponseProcessor.getFailureCallback(druidAggregationQuery)
+        druidPartialDataResponseProcessor.getResponseContext()
+        druidPartialDataResponseProcessor.getErrorCallback(druidAggregationQuery)
+        druidPartialDataResponseProcessor.getFailureCallback(druidAggregationQuery)
 
         then:
         1 * next.getResponseContext() >> responseContext
@@ -55,7 +57,7 @@ class PartialDataV2ResponseProcessorSpec extends Specification {
         1 * next.getErrorCallback(druidAggregationQuery) >> httpErrorCallback
     }
 
-    def "getUncoveredIntervalsFromResponse returns all uncovered intervals in SimplifiedList"() {
+    def "getOverlap returns intersection between Druid intervals and Fili intervals"() {
         given:
         JsonNode json = MAPPER.readTree(
                 jsonInString
@@ -63,13 +65,16 @@ class PartialDataV2ResponseProcessorSpec extends Specification {
                         .replace("\n", "")
         )
 
-        expect:
-        partialDataV2ResponseProcessor.getUncoveredIntervalsFromResponse(json) == new SimplifiedIntervalList(
-                expected.collect{it -> new Interval(it)}
-        )
+        DataSource dataSource = Mock(DataSource)
+        ConstrainedTable constrainedTable = Mock(ConstrainedTable)
+
+        constrainedTable.getAvailableIntervals() >> new SimplifiedIntervalList(availableIntervals.collect{it -> new Interval(it)})
+        dataSource.getPhysicalTable() >> constrainedTable
+        druidAggregationQuery.getDataSource() >> dataSource
+
 
         where:
-        jsonInString | expected
+        jsonInString | availableIntervals | expected
         '''
         {
             "response": [{"k1":"v1"}],
@@ -82,6 +87,6 @@ class PartialDataV2ResponseProcessorSpec extends Specification {
             },
             "status-code": 200
         }
-        ''' | ["2016-11-22T00:00:00.000Z/2016-12-18T00:00:00.000Z", "2016-12-25T00:00:00.000Z/2017-01-03T00:00:00.000Z"]
+        ''' | ["2016-11-22T00:00:00.000Z/2016-12-18T00:00:00.000Z"] | ["2016-11-22T00:00:00.000Z/2016-12-18T00:00:00.000Z"]
     }
 }
