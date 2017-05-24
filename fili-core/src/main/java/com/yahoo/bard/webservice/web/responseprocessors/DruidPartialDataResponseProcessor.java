@@ -106,8 +106,8 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
      *     </li>
      *     <li>
      *         Compare both SimplifiedIntervalLists above, if allAvailableIntervals has any overlap with
-     *         uncoveredIntervals, invoke error response indicating druid is missing some data that are we expects to
-     *         exists.
+     *         uncoveredIntervals, invoke error response indicating druid is missing some data that are we are expecting
+     *         to exists.
      *     </li>
      * </ol>
      *
@@ -154,9 +154,11 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
     private void validateJsonResponse(JsonNode json, DruidAggregationQuery<?> query) {
         if (json instanceof ArrayNode) {
             logAndGetErrorCallback("Response is missing X-Druid-Response-Context and status code", query);
+            return;
         }
         if (!json.has(FullResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())) {
             logAndGetErrorCallback("Response is missing X-Druid-Response-Context", query);
+            return;
         }
         if (!json.get(FullResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())
                 .has(FullResponseContentKeys.UNCOVERED_INTERVALS.getName())
@@ -165,6 +167,7 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
                     "Response is missing 'uncoveredIntervals' from X-Druid-Response-Context header",
                     query
             );
+            return;
         }
         if (!json.get(FullResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())
                 .has(FullResponseContentKeys.UNCOVERED_INTERVALS_OVERFLOWED.getName())
@@ -173,6 +176,7 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
                     "Response is missing 'uncoveredIntervalsOverflowed' from X-Druid-Response-Context header",
                     query
             );
+            return;
         }
         if (!json.has(FullResponseContentKeys.STATUS_CODE.getName())) {
             logAndGetErrorCallback("Response is missing response status code", query);
@@ -190,8 +194,12 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
                 .get(FullResponseContentKeys.UNCOVERED_INTERVALS_OVERFLOWED.getName())
                 .asBoolean()
     ) {
-            int limit = query.getContext().getUncoveredIntervalsLimit();
-            logAndGetErrorCallback(ErrorMessageFormat.TOO_MUCH_INTERVAL_MISSING.format(limit, limit), query);
+            logAndGetErrorCallback(
+                    ErrorMessageFormat.TOO_MANY_INTERVALS_MISSING.format(
+                            query.getContext().getUncoveredIntervalsLimit()
+                    ),
+                    query
+            );
         }
     }
 

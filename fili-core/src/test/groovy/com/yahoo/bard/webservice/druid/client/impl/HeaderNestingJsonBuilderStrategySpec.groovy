@@ -12,7 +12,7 @@ import org.asynchttpclient.Response
 import java.nio.charset.StandardCharsets
 import java.util.function.Supplier
 
-class AsyncDruidWebServiceImplWithHeaderNestingSpec extends Specification {
+class HeaderNestingJsonBuilderStrategySpec extends Specification {
 
     def "Make sure X-Druid-Response-Context and status-code are merged into existing JsonNode"() {
         given:
