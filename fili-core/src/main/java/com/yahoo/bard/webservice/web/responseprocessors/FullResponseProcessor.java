@@ -7,6 +7,7 @@ package com.yahoo.bard.webservice.web.responseprocessors;
  * response.
  * <p>
  * This is a "Full" response process in a sense that it extracts and incorporates header information.
+ *
  */
 public interface FullResponseProcessor extends ResponseProcessor {
 }
