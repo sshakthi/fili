@@ -10,7 +10,6 @@ import com.yahoo.bard.webservice.druid.client.DruidWebService;
 import com.yahoo.bard.webservice.metadata.QuerySigningService;
 import com.yahoo.bard.webservice.table.PhysicalTableDictionary;
 import com.yahoo.bard.webservice.web.handlers.AsyncWebServiceRequestHandler;
-import com.yahoo.bard.webservice.web.handlers.CacheRequestHandler;
 import com.yahoo.bard.webservice.web.handlers.CacheV2RequestHandler;
 import com.yahoo.bard.webservice.web.handlers.DataRequestHandler;
 import com.yahoo.bard.webservice.web.handlers.DebugRequestHandler;
@@ -103,9 +102,6 @@ public class DruidWorkflow implements RequestWorkflowProvider {
         if (BardFeatureFlag.DRUID_CACHE_V2.isOn()) {
             uiHandler = new CacheV2RequestHandler(uiHandler, dataCache, querySigningService, mapper);
             nonUiHandler = new CacheV2RequestHandler(nonUiHandler, dataCache, querySigningService, mapper);
-        } else {
-            uiHandler = new CacheRequestHandler(uiHandler, dataCache, mapper);
-            nonUiHandler = new CacheRequestHandler(nonUiHandler, dataCache, mapper);
         }
 
         if (BardFeatureFlag.QUERY_SPLIT.isOn()) {

@@ -9,8 +9,8 @@ Current
 -------
 ### Added:
 
-- [Prepare for Etage Cache](https://github.com/yahoo/fili/pull/289)
-    * Add Etag Cache feature flag
+- [Prepare for etag Cache](https://github.com/yahoo/fili/pull/289)
+    * Add etag Cache feature flag
     * Deprecate Cache v1 components and remove from DruidWorkflow
     * Log a warning indicating cache V1 has been deprecated
     * Make `AsyncDruidWebServiceImpl::sendRequest` not blow up when getting a 304 status response if etag cache is on
