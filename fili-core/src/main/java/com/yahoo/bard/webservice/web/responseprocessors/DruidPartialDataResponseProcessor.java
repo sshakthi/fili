@@ -9,7 +9,7 @@ import com.yahoo.bard.webservice.util.SimplifiedIntervalList;
 import com.yahoo.bard.webservice.web.ErrorMessageFormat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.joda.time.Interval;
 import org.slf4j.Logger;
@@ -116,10 +116,10 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
      * @param metadata  The LoggingContext to use
      */
     @Override
-    public void processResponse(JsonNode json, DruidAggregationQuery<?> query, LoggingContext metadata) {
+    public void processResponse(ObjectNode json, DruidAggregationQuery<?> query, LoggingContext metadata) {
         validateJsonResponse(json, query);
 
-        if (json.get(FullResponseContentKeys.STATUS_CODE.getName()).asInt() == Status.OK.getStatusCode()) {
+        if (json.get(DruidJsonResponseContentKeys.STATUS_CODE.getName()).asInt() == Status.OK.getStatusCode()) {
             checkOverflow(json, query);
 
             SimplifiedIntervalList overlap = getOverlap(json, query);
@@ -129,7 +129,7 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
             if (next instanceof FullResponseProcessor) {
                 next.processResponse(json, query, metadata);
             } else {
-                next.processResponse(json.get(FullResponseContentKeys.RESPONSE.getName()), query, metadata);
+                next.processResponse(json.get(DruidJsonResponseContentKeys.RESPONSE.getName()), query, metadata);
             }
         }
 
@@ -148,38 +148,33 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
      *     <li>status-code</li>
      * </ul>
      *
-     * @param json  The JSON response that is to be validated
+     * @param objectNode  The JSON response that is to be validated
      * @param query  The query with the schema for processing this response
      */
-    private void validateJsonResponse(JsonNode json, DruidAggregationQuery<?> query) {
-        if (json instanceof ArrayNode) {
-            logAndGetErrorCallback("Response is missing X-Druid-Response-Context and status code", query);
+    private void validateJsonResponse(ObjectNode objectNode, DruidAggregationQuery<?> query) {
+        if (!objectNode.has(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())) {
+            logAndGetErrorCallback("JSON response is missing X-Druid-Response-Context", query);
             return;
         }
-        if (!json.has(FullResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())) {
-            logAndGetErrorCallback("Response is missing X-Druid-Response-Context", query);
-            return;
-        }
-        if (!json.get(FullResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())
-                .has(FullResponseContentKeys.UNCOVERED_INTERVALS.getName())
+        JsonNode druidResponseContext = objectNode.get(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName());
+        if (!druidResponseContext.has(DruidJsonResponseContentKeys.UNCOVERED_INTERVALS.getName())
         ) {
             logAndGetErrorCallback(
-                    "Response is missing 'uncoveredIntervals' from X-Druid-Response-Context header",
+                    "JSON response is missing 'uncoveredIntervals' from X-Druid-Response-Context header",
                     query
             );
             return;
         }
-        if (!json.get(FullResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())
-                .has(FullResponseContentKeys.UNCOVERED_INTERVALS_OVERFLOWED.getName())
+        if (!druidResponseContext.has(DruidJsonResponseContentKeys.UNCOVERED_INTERVALS_OVERFLOWED.getName())
         ) {
             logAndGetErrorCallback(
-                    "Response is missing 'uncoveredIntervalsOverflowed' from X-Druid-Response-Context header",
+                    "JSON response is missing 'uncoveredIntervalsOverflowed' from X-Druid-Response-Context header",
                     query
             );
             return;
         }
-        if (!json.has(FullResponseContentKeys.STATUS_CODE.getName())) {
-            logAndGetErrorCallback("Response is missing response status code", query);
+        if (!objectNode.has(DruidJsonResponseContentKeys.STATUS_CODE.getName())) {
+            logAndGetErrorCallback("JSON response is missing response status code", query);
         }
     }
 
@@ -190,8 +185,8 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
      * @param query  The query with the schema for processing this response
      */
     private void checkOverflow(JsonNode json, DruidAggregationQuery<?> query) {
-        if (json.get(FullResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())
-                .get(FullResponseContentKeys.UNCOVERED_INTERVALS_OVERFLOWED.getName())
+        if (json.get(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())
+                .get(DruidJsonResponseContentKeys.UNCOVERED_INTERVALS_OVERFLOWED.getName())
                 .asBoolean()
     ) {
             logAndGetErrorCallback(
@@ -244,8 +239,8 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
     private SimplifiedIntervalList getOverlap(JsonNode json, DruidAggregationQuery<?> query) {
         List<Interval> intervals = new ArrayList<>();
         for (JsonNode jsonNode :
-                json.get(FullResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())
-                        .get(FullResponseContentKeys.UNCOVERED_INTERVALS.getName())
+                json.get(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())
+                        .get(DruidJsonResponseContentKeys.UNCOVERED_INTERVALS.getName())
                 ) {
             intervals.add(new Interval(jsonNode.asText()));
         }

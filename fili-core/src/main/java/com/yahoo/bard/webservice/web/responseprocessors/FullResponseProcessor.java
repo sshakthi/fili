@@ -2,6 +2,14 @@
 // Licensed under the terms of the Apache license. Please see LICENSE.md file distributed with this work for terms.
 package com.yahoo.bard.webservice.web.responseprocessors;
 
+import com.yahoo.bard.webservice.druid.model.query.DruidAggregationQuery;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import java.io.IOException;
+
 /**
  * Response processor for that extracts header information from Druid response and put the information in our own
  * response.
@@ -39,4 +47,21 @@ package com.yahoo.bard.webservice.web.responseprocessors;
  *
  */
 public interface FullResponseProcessor extends ResponseProcessor {
+    @Override
+    default void processResponse(JsonNode json, DruidAggregationQuery<?> query, LoggingContext metadata) {
+        try {
+            processResponse((ObjectNode) new ObjectMapper().readTree(json.asText()), query, metadata);
+        } catch (IOException exception) {
+            throw new RuntimeException(exception);
+        }
+
+    }
+
+    /**
+     * Process the response json wrapped in an ObjectNode and respond to the original web request.
+     * @param objectNode  The json representing a druid data response
+     * @param query  The query with the schema for processing this response
+     * @param metadata  The LoggingContext to use
+     */
+    void processResponse(ObjectNode objectNode, DruidAggregationQuery<?> query, LoggingContext metadata);
 }
