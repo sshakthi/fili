@@ -9,7 +9,7 @@ import com.yahoo.bard.webservice.util.SimplifiedIntervalList;
 import com.yahoo.bard.webservice.web.ErrorMessageFormat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeType;
 
 import org.joda.time.Interval;
 import org.slf4j.Logger;
@@ -152,7 +152,7 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
      * @param query  The query with the schema for processing this response
      */
     private void validateJsonResponse(JsonNode json, DruidAggregationQuery<?> query) {
-        if (json instanceof ArrayNode) {
+        if (json.getNodeType() == JsonNodeType.ARRAY) {
             logAndGetErrorCallback("JSON response is missing X-Druid-Response-Context and status code", query);
         }
 

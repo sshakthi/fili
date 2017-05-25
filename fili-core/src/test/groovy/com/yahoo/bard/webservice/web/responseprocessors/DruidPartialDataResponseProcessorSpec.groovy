@@ -208,7 +208,7 @@ class DruidPartialDataResponseProcessorSpec extends Specification {
 
     def "validateJsonResponse recognizes missing component"() {
         given:
-        ArrayNode arrayNode = Mock(ArrayNode)
+        ArrayNode arrayNode = new ArrayNode()
         JsonNode druidResponseContext = Mock(JsonNode)
         JsonNode json = Mock(JsonNode)
         json.get(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName()) >> druidResponseContext
