@@ -12,6 +12,7 @@ import com.yahoo.bard.webservice.util.SimplifiedIntervalList
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.databind.node.ObjectNode
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module
 
@@ -200,21 +201,32 @@ class DruidPartialDataResponseProcessorSpec extends Specification {
         then:
         1 * httpErrorCallback.dispatch(
                 500,
-                'The server encountered an unexpected condition which prevented it from fulfilling the request.', 'Data availability expectation does not match with actual query result obtained from druid for the following intervals [2016-11-22T00:00:00.000Z/2016-12-18T00:00:00.000Z] where druid does not have data'
+                'The server encountered an unexpected condition which prevented it from fulfilling the request.',
+                'Data availability expectation does not match with actual query result obtained from druid for the following intervals [2016-11-22T00:00:00.000Z/2016-12-18T00:00:00.000Z] where druid does not have data'
         )
-
     }
 
     def "validateJsonResponse recognizes missing component"() {
         given:
+        ArrayNode arrayNode = Mock(ArrayNode)
         JsonNode druidResponseContext = Mock(JsonNode)
-        ObjectNode objectNode = Mock(ObjectNode)
-        objectNode.get(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName()) >> druidResponseContext
+        JsonNode json = Mock(JsonNode)
+        json.get(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName()) >> druidResponseContext
+
+        when:
+        druidPartialDataResponseProcessor.validateJsonResponse(arrayNode, druidAggregationQuery)
+        then:
+        1 * httpErrorCallback.dispatch(
+                500,
+                'The server encountered an unexpected condition which prevented it from fulfilling the ' +
+                'request.',
+                'JSON response is missing X-Druid-Response-Context and status code'
+        )
 
         // missing X-Druid-Response-Context
         when:
-        objectNode.has(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName()) >> false
-        druidPartialDataResponseProcessor.validateJsonResponse(objectNode, druidAggregationQuery)
+        json.has(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName()) >> false
+        druidPartialDataResponseProcessor.validateJsonResponse(json, druidAggregationQuery)
         then:
         1 * httpErrorCallback.dispatch(
                 500,
@@ -225,9 +237,9 @@ class DruidPartialDataResponseProcessorSpec extends Specification {
 
         // missing X-Druid-Response-Context.uncoveredIntervals
         when:
-        objectNode.has(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName()) >> true
+        json.has(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName()) >> true
         druidResponseContext.has(DruidJsonResponseContentKeys.UNCOVERED_INTERVALS.getName()) >> false
-        druidPartialDataResponseProcessor.validateJsonResponse(objectNode, druidAggregationQuery)
+        druidPartialDataResponseProcessor.validateJsonResponse(json, druidAggregationQuery)
         then:
         1 * httpErrorCallback.dispatch(
                 500,
@@ -238,10 +250,10 @@ class DruidPartialDataResponseProcessorSpec extends Specification {
 
         // missing X-Druid-Response-Context.uncoveredIntervalsOverflowed
         when:
-        objectNode.has(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName()) >> true
+        json.has(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName()) >> true
         druidResponseContext.has(DruidJsonResponseContentKeys.UNCOVERED_INTERVALS.getName()) >> true
         druidResponseContext.has(DruidJsonResponseContentKeys.UNCOVERED_INTERVALS_OVERFLOWED.getName()) >> false
-        druidPartialDataResponseProcessor.validateJsonResponse(objectNode, druidAggregationQuery)
+        druidPartialDataResponseProcessor.validateJsonResponse(json, druidAggregationQuery)
         then:
         1 * httpErrorCallback.dispatch(
                 500,
@@ -252,11 +264,11 @@ class DruidPartialDataResponseProcessorSpec extends Specification {
 
         // missing status code
         when:
-        objectNode.has(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName()) >> true
+        json.has(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName()) >> true
         druidResponseContext.has(DruidJsonResponseContentKeys.UNCOVERED_INTERVALS.getName()) >> true
         druidResponseContext.has(DruidJsonResponseContentKeys.UNCOVERED_INTERVALS_OVERFLOWED.getName()) >> true
-        objectNode.has(DruidJsonResponseContentKeys.STATUS_CODE.getName()) >> false
-        druidPartialDataResponseProcessor.validateJsonResponse(objectNode, druidAggregationQuery)
+        json.has(DruidJsonResponseContentKeys.STATUS_CODE.getName()) >> false
+        druidPartialDataResponseProcessor.validateJsonResponse(json, druidAggregationQuery)
         then:
         1 * httpErrorCallback.dispatch(
                 500,

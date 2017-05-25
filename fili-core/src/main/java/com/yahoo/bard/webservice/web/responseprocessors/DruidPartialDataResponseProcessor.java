@@ -9,7 +9,7 @@ import com.yahoo.bard.webservice.util.SimplifiedIntervalList;
 import com.yahoo.bard.webservice.web.ErrorMessageFormat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 
 import org.joda.time.Interval;
 import org.slf4j.Logger;
@@ -116,7 +116,7 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
      * @param metadata  The LoggingContext to use
      */
     @Override
-    public void processResponse(ObjectNode json, DruidAggregationQuery<?> query, LoggingContext metadata) {
+    public void processResponse(JsonNode json, DruidAggregationQuery<?> query, LoggingContext metadata) {
         validateJsonResponse(json, query);
 
         if (json.get(DruidJsonResponseContentKeys.STATUS_CODE.getName()).asInt() == Status.OK.getStatusCode()) {
@@ -148,15 +148,19 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
      *     <li>status-code</li>
      * </ul>
      *
-     * @param objectNode  The JSON response that is to be validated
+     * @param json  The JSON response that is to be validated
      * @param query  The query with the schema for processing this response
      */
-    private void validateJsonResponse(ObjectNode objectNode, DruidAggregationQuery<?> query) {
-        if (!objectNode.has(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())) {
+    private void validateJsonResponse(JsonNode json, DruidAggregationQuery<?> query) {
+        if (json instanceof ArrayNode) {
+            logAndGetErrorCallback("JSON response is missing X-Druid-Response-Context and status code", query);
+        }
+
+        if (!json.has(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName())) {
             logAndGetErrorCallback("JSON response is missing X-Druid-Response-Context", query);
             return;
         }
-        JsonNode druidResponseContext = objectNode.get(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName());
+        JsonNode druidResponseContext = json.get(DruidJsonResponseContentKeys.DRUID_RESPONSE_CONTEXT.getName());
         if (!druidResponseContext.has(DruidJsonResponseContentKeys.UNCOVERED_INTERVALS.getName())
         ) {
             logAndGetErrorCallback(
@@ -173,7 +177,7 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
             );
             return;
         }
-        if (!objectNode.has(DruidJsonResponseContentKeys.STATUS_CODE.getName())) {
+        if (!json.has(DruidJsonResponseContentKeys.STATUS_CODE.getName())) {
             logAndGetErrorCallback("JSON response is missing response status code", query);
         }
     }
