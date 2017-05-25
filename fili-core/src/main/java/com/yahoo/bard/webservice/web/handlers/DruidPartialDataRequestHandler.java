@@ -6,6 +6,7 @@ import com.yahoo.bard.webservice.config.SystemConfig;
 import com.yahoo.bard.webservice.config.SystemConfigProvider;
 import com.yahoo.bard.webservice.druid.model.query.DruidAggregationQuery;
 import com.yahoo.bard.webservice.web.DataApiRequest;
+import com.yahoo.bard.webservice.web.responseprocessors.DruidPartialDataResponseProcessor;
 import com.yahoo.bard.webservice.web.responseprocessors.ResponseProcessor;
 
 import javax.validation.constraints.NotNull;
@@ -15,24 +16,23 @@ import javax.validation.constraints.NotNull;
  * <p>
  * The handler inject "uncoveredIntervalsLimit: $druid_uncovered_interval_limit" context to Druid query.
  */
-public class PartialDataV2RequestHandler implements DataRequestHandler {
+public class DruidPartialDataRequestHandler implements DataRequestHandler {
 
     private static final SystemConfig SYSTEM_CONFIG = SystemConfigProvider.getInstance();
+    private static final int DRUID_UNCOVERED_INTERVAL_LIMIT = SYSTEM_CONFIG.getIntProperty(
+            SYSTEM_CONFIG.getPackageVariableName("druid_uncovered_interval_limit"),
+            0
+    );
 
     private final DataRequestHandler next;
-    private final int uncoveredIntervalsLimit;
 
     /**
      * Constructor.
      *
      * @param next  Next Handler in the chain
      */
-    public PartialDataV2RequestHandler(@NotNull DataRequestHandler next) {
+    public DruidPartialDataRequestHandler(@NotNull DataRequestHandler next) {
         this.next = next;
-        this.uncoveredIntervalsLimit = SYSTEM_CONFIG.getIntProperty(
-                SYSTEM_CONFIG.getPackageVariableName("druid_uncovered_interval_limit"),
-                0
-        );
     }
 
     @Override
@@ -45,8 +45,10 @@ public class PartialDataV2RequestHandler implements DataRequestHandler {
         return next.handleRequest(
                 context,
                 request,
-                druidQuery.withContext(druidQuery.getContext().withUncoveredIntervalsLimit(uncoveredIntervalsLimit)),
-                response
+                druidQuery.withContext(
+                        druidQuery.getContext().withUncoveredIntervalsLimit(DRUID_UNCOVERED_INTERVAL_LIMIT)
+                ),
+                new DruidPartialDataResponseProcessor(response)
         );
     }
 }
