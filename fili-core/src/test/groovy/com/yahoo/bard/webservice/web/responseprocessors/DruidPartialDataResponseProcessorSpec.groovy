@@ -58,11 +58,7 @@ class DruidPartialDataResponseProcessorSpec extends Specification {
 
     def "getOverlap returns intersection between Druid intervals and Fili intervals in case of #caseDescription"() {
         given:
-        JsonNode json = MAPPER.readTree(
-                jsonInString
-                        .replace(" ", "")
-                        .replace("\n", "")
-        )
+        JsonNode json = MAPPER.readTree(jsonInString)
 
         DataSource dataSource = Mock(DataSource)
         ConstrainedTable constrainedTable = Mock(ConstrainedTable)
@@ -72,7 +68,6 @@ class DruidPartialDataResponseProcessorSpec extends Specification {
         )
         dataSource.getPhysicalTable() >> constrainedTable
         druidAggregationQuery.getDataSource() >> dataSource
-
 
         where:
         jsonInString | availableIntervals | expected | caseDescription
@@ -84,7 +79,7 @@ class DruidPartialDataResponseProcessorSpec extends Specification {
                     "2016-11-22T00:00:00.000Z/2016-12-18T00:00:00.000Z",
                     "2016-12-25T00:00:00.000Z/2017-01-03T00:00:00.000Z"
                 ],
-                "uncoveredIntervalsOverflowed": true
+                "uncoveredIntervalsOverflowed": false
             },
             "status-code": 200
         }
@@ -99,7 +94,7 @@ class DruidPartialDataResponseProcessorSpec extends Specification {
                     "2016-11-22T00:00:00.000Z/2016-12-18T00:00:00.000Z",
                     "2016-12-25T00:00:00.000Z/2017-01-03T00:00:00.000Z"
                 ],
-                "uncoveredIntervalsOverflowed": true
+                "uncoveredIntervalsOverflowed": false
             },
             "status-code": 200
         }
@@ -114,7 +109,7 @@ class DruidPartialDataResponseProcessorSpec extends Specification {
                     "2016-11-22T00:00:00.000Z/2016-12-18T00:00:00.000Z",
                     "2016-12-25T00:00:00.000Z/2017-01-03T00:00:00.000Z"
                 ],
-                "uncoveredIntervalsOverflowed": true
+                "uncoveredIntervalsOverflowed": false
             },
             "status-code": 200
         }
@@ -129,7 +124,7 @@ class DruidPartialDataResponseProcessorSpec extends Specification {
                     "2016-11-22T00:00:00.000Z/2016-12-18T00:00:00.000Z",
                     "2016-12-25T00:00:00.000Z/2017-01-03T00:00:00.000Z"
                 ],
-                "uncoveredIntervalsOverflowed": true
+                "uncoveredIntervalsOverflowed": false
             },
             "status-code": 200
         }
@@ -153,7 +148,7 @@ class DruidPartialDataResponseProcessorSpec extends Specification {
                     },
                     "status-code": 200
                 }
-                '''.replace(" ", "").replace("\n", "")
+                '''
         )
 
         when:
@@ -183,7 +178,7 @@ class DruidPartialDataResponseProcessorSpec extends Specification {
                     },
                     "status-code": 200
                 }
-                '''.replace(" ", "").replace("\n", "")
+                '''
         )
 
         DataSource dataSource = Mock(DataSource)

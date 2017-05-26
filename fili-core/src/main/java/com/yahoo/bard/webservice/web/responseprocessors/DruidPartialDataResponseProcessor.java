@@ -119,7 +119,8 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
     public void processResponse(JsonNode json, DruidAggregationQuery<?> query, LoggingContext metadata) {
         validateJsonResponse(json, query);
 
-        if (json.get(DruidJsonResponseContentKeys.STATUS_CODE.getName()).asInt() == Status.OK.getStatusCode()) {
+        int statusCode = json.get(DruidJsonResponseContentKeys.STATUS_CODE.getName()).asInt();
+        if (statusCode == Status.OK.getStatusCode()) {
             checkOverflow(json, query);
 
             SimplifiedIntervalList overlap = getOverlap(json, query);
@@ -131,9 +132,14 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
             } else {
                 next.processResponse(json.get(DruidJsonResponseContentKeys.RESPONSE.getName()), query, metadata);
             }
+        } else if (statusCode == Status.NOT_MODIFIED.getStatusCode() && next instanceof FullResponseProcessor) {
+            logAndGetErrorCallback(
+                    "Content Not Modified(304), but no etag cache response processor is available to process " +
+                    "the 304 response",
+                    query);
+        } else {
+            next.processResponse(json, query, metadata);
         }
-
-        next.processResponse(json, query, metadata);
     }
 
     /**

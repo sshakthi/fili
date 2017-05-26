@@ -230,7 +230,7 @@ public enum ErrorMessageFormat implements MessageFormatter {
             "Query is returning more than the configured limit of '%s' missing intervals. " +
                     "There may be a problem with your data."
     ),
-    
+
     TOO_MANY_BACKING_DATA_SOURCES("TableDataSource built with too many backing data sources: %s"),
     TOO_FEW_BACKING_DATA_SOURCES("TableDataSource built with insufficient backing data sources: %s");
 
