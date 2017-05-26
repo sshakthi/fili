@@ -132,7 +132,7 @@ public class DruidPartialDataResponseProcessor implements FullResponseProcessor 
             } else {
                 next.processResponse(json.get(DruidJsonResponseContentKeys.RESPONSE.getName()), query, metadata);
             }
-        } else if (statusCode == Status.NOT_MODIFIED.getStatusCode() && next instanceof FullResponseProcessor) {
+        } else if (statusCode == Status.NOT_MODIFIED.getStatusCode() && !(next instanceof FullResponseProcessor)) {
             logAndGetErrorCallback(
                     "Content Not Modified(304), but no etag cache response processor is available to process " +
                     "the 304 response",

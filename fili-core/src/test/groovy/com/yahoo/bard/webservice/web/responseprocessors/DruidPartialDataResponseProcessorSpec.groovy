@@ -69,6 +69,11 @@ class DruidPartialDataResponseProcessorSpec extends Specification {
         dataSource.getPhysicalTable() >> constrainedTable
         druidAggregationQuery.getDataSource() >> dataSource
 
+        expect:
+        druidPartialDataResponseProcessor.getOverlap(json, druidAggregationQuery) == new SimplifiedIntervalList(
+                expected.collect{it -> new Interval(it)}
+        )
+
         where:
         jsonInString | availableIntervals | expected | caseDescription
         '''
